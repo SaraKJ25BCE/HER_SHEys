@@ -1,0 +1,61 @@
+{
+    "candidate_profile": {
+        "existing_skills": [
+            "SQL"
+        ],
+        "missing_skills_for_target": [
+            "Python",
+            "Apache Spark",
+            "Snowflake",
+            "dbt",
+            "AWS S3/Redshift",
+            "Git",
+            "Docker"
+        ],
+        "youtube_search_queries": [
+            "Python programming tutorial for Data Engineering",
+            "Apache Spark full course for beginners",
+            "Snowflake data warehouse tutorial for data engineers",
+            "dbt data build tool crash course",
+            "AWS S3 and Redshift tutorial for data engineering",
+            "Git and GitHub tutorial for developers",
+            "Docker for Data Engineers beginner course"
+        ]
+    },
+    "generated_quiz": [
+        {
+            "question": "Which Python feature is best suited for memory-efficient processing of extremely large datasets or log files in Data Engineering pipelines?",
+            "options": [
+                "List Comprehensions",
+                "Generators",
+                "Global Variables",
+                "Dictionaries"
+            ],
+            "correct_answer": "B"
+        },
+        {
+            "question": "In Python data pipelines, what is the primary benefit of using a context manager (the 'with' statement) when handling file I/O operations?",
+            "options": [
+                "It automatically converts raw text into a Pandas DataFrame.",
+                "It ensures file resources are properly closed even if errors occur during execution.",
+                "It parallelizes reading operations across multiple CPU cores.",
+                "It automatically encrypts sensitive data being written to disk."
+            ],
+            "correct_answer": "B"
+        },
+        {
+            "question": "What is the primary purpose of the 'functools.wraps' decorator when creating custom decorators in Python ETL pipeline development?",
+            "options": [
+                "To measure the execution time of pipeline steps automatically.",
+                "To retry failed database connections.",
+                "To preserve the original function's name and docstring metadata.",
+                "To convert decorated functions into async generators."
+            ],
+            "correct_answer": "C"
+        }
+    ],
+    "matched_scheme": {
+        "matched_scheme": "WISE-PhD",
+        "reason": "The applicant is 32 years old and holds an M.Sc., which satisfies the age requirement (27-45) and qualification requirement (PG in Basic/Applied Sciences) for the WISE-PhD scheme."
+    }
+}
