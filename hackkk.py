@@ -14,7 +14,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-3.6-flash"
 
-# Ground-truth market benchmark skills (Can be updated dynamically by Person 3)
+# Ground-truth market benchmark skills
 MARKET_BENCHMARKS = {
     "Data Engineer": ["Python", "SQL", "Apache Spark", "Snowflake", "dbt", "AWS S3/Redshift", "Git", "Docker"],
     "AI/ML Engineer": ["Python", "PyTorch", "HuggingFace", "LangChain/LlamaIndex", "Vector Databases", "MLOps", "REST APIs"],
@@ -41,116 +41,100 @@ def safe_json_parse(raw_text: str, default_fallback: dict) -> dict:
         return default_fallback
 
 
-def parse_resume(resume_text: str, target_role: str) -> dict:
+def process_full_returnee_pipeline(resume_text: str, target_role: str, user_degree: str, age: int, has_phd: bool) -> dict:
     """
-    Parses candidate resume against current market benchmark skills.
+    Executes resume parsing, DST scheme matching, quiz generation, and 5-day project creation
+    in a SINGLE Gemini API pass to minimize latency.
     """
     benchmark_skills = MARKET_BENCHMARKS.get(target_role, ["Python", "SQL", "Git", "Cloud Infrastructure"])
     
-    prompt = f"""
-    Analyze this resume for a professional returning to work in STEM:
-    Resume: {resume_text}
-    Target Role: {target_role}
-    Current Ground-Truth In-Demand Skills for {target_role}: {benchmark_skills}
-
-    1. Extract skills the applicant already possesses.
-    2. Compare their profile against the provided 'Current Ground-Truth In-Demand Skills' to identify exact missing skill gaps.
-    3. Generate explicit YouTube search queries for those missing skills.
-
-    Return a valid JSON object strictly matching this schema:
-    {{
-        "existing_skills": ["list of current skills"],
-        "missing_skills_for_target": ["list of missing skills from the benchmark"],
-        "youtube_search_queries": ["search query for skill gap 1", "search query for skill gap 2"]
-    }}
-    """
-    fallback = {
-        "existing_skills": ["SQL", "Data Analysis"],
-        "missing_skills_for_target": ["Python", "Apache Spark", "Git"],
-        "youtube_search_queries": ["Python for Data Engineering tutorial", "Apache Spark crash course"]
-    }
-    
-    response = client.models.generate_content(
-        model=MODEL_ID,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
-    )
-    return safe_json_parse(response.text, fallback)
-
-
-def generate_quiz(topic: str) -> list:
-    """
-    Generates a 3-question conceptual quiz based on a skill topic.
-    """
-    prompt = f"""
-    Create a 3-question multiple-choice quiz testing core concepts of: {topic}.
-    Return a valid JSON array strictly matching this schema:
-    [
-        {{
-            "question": "Question text",
-            "options": ["Option A", "Option B", "Option C", "Option D"],
-            "correct_answer": "Option letter (e.g. A)"
-        }}
-    ]
-    """
-    fallback = [
-        {
-            "question": f"What is a primary concept in {topic}?",
-            "options": ["Concept A", "Concept B", "Concept C", "Concept D"],
-            "correct_answer": "A"
-        }
-    ]
-    
-    response = client.models.generate_content(
-        model=MODEL_ID,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
-    )
-    return safe_json_parse(response.text, fallback)
-
-
-def match_scheme(user_degree: str, age: int, has_phd: bool) -> dict:
-    """
-    Performs scheme eligibility matching using explicit rules (RAG Pattern).
-    """
     dst_context = """
     WISE-PhD: Age 27-45, requires PG in Basic/Applied Sciences or B.Tech.
     WISE-PDF: Age 27-60, requires Ph.D. in STEM area.
     WISE-SCOPE: Age 27-60, requires Ph.D. in STEM area for societal lab-to-land projects.
     """
-    
+
     prompt = f"""
-    Using ONLY the rules listed below, determine which DST scheme the applicant qualifies for.
-    Rules:
-    {dst_context}
+    Perform a complete career re-entry evaluation for this STEM returnee in ONE response.
 
-    Applicant Profile:
-    - Degree: {user_degree}
-    - Age: {age}
-    - Has Ph.D.: {has_phd}
+    APPLICANT PROFILE:
+    - Resume: {resume_text}
+    - Target Role: {target_role}
+    - Degree: {user_degree} | Age: {age} | Has Ph.D.: {has_phd}
 
-    If no scheme matches, set matched_scheme to "None".
-    Return a valid JSON object strictly matching this schema:
+    GROUND-TRUTH DATA:
+    - Market Skills for {target_role}: {benchmark_skills}
+    - DST Scheme Rules: {dst_context}
+
+    INSTRUCTIONS:
+    1. Extract existing skills and missing skill gaps based on market benchmarks.
+    2. Generate 2 targeted YouTube search queries for missing skills.
+    3. Determine DST scheme eligibility based strictly on the rules provided.
+    4. Create a 3-question conceptual quiz on the top missing skill gap.
+    5. Build a 5-day micro-returnship project sandbox (days 1 to 5).
+
+    Return a valid JSON object matching this EXACT schema:
     {{
-        "matched_scheme": "Scheme Name or None",
-        "reason": "1-sentence reason for eligibility or disqualification"
+        "candidate_profile": {{
+            "existing_skills": ["list of skills"],
+            "missing_skills_for_target": ["list of skill gaps"],
+            "youtube_search_queries": ["query 1", "query 2"]
+        }},
+        "matched_scheme": {{
+            "matched_scheme": "Scheme Name or None",
+            "reason": "1-sentence explanation"
+        }},
+        "generated_quiz": [
+            {{
+                "question": "Question text",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "Option letter"
+            }}
+        ],
+        "micro_returnship_sandbox": [
+            {{
+                "day": 1,
+                "title": "Day Title",
+                "objective": "Daily Goal",
+                "task_description": "Instructions",
+                "github_deliverable": "script.py"
+            }}
+        ]
     }}
     """
-    fallback = {
-        "matched_scheme": "WISE-PhD",
-        "reason": "Eligible based on age range and holding a Post-Graduate degree in STEM."
-    }
     
+    fallback = {
+        "candidate_profile": {
+            "existing_skills": ["SQL", "Data Analysis"],
+            "missing_skills_for_target": ["Python", "Apache Spark", "Git"],
+            "youtube_search_queries": ["Python Data Engineering tutorial", "Apache Spark crash course"]
+        },
+        "matched_scheme": {
+            "matched_scheme": "WISE-PhD",
+            "reason": "Eligible based on age range and holding a Post-Graduate degree in STEM."
+        },
+        "generated_quiz": [
+            {
+                "question": "What is Apache Spark primary use case?",
+                "options": ["Distributed Data Processing", "CSS Styling", "DNS Lookup", "Video Editing"],
+                "correct_answer": "A"
+            }
+        ],
+        "micro_returnship_sandbox": [
+            {
+                "day": 1,
+                "title": "Day 1: Setup & Python Basics",
+                "objective": "Configure environment and verify pipeline data.",
+                "task_description": "Set up VS Code, install dependencies, and write basic data processing scripts.",
+                "github_deliverable": "day_1_setup.py"
+            }
+        ]
+    }
+
     response = client.models.generate_content(
         model=MODEL_ID,
         contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
+        config=types.GenerateContentConfig(response_mime_type="application/json")
     )
     return safe_json_parse(response.text, fallback)
 
@@ -159,18 +143,10 @@ if __name__ == "__main__":
     sample_resume = "4 years experience as SQL Analyst. Master of Science degree."
     target = "Data Engineer"
     
-    print("--- Running AI & RAG Pipeline ---")
-    parsed_data = parse_resume(sample_resume, target)
-    quiz_data = generate_quiz(parsed_data["youtube_search_queries"][0])
-    scheme_data = match_scheme(user_degree="M.Sc", age=32, has_phd=False)
-
-    final_output = {
-        "candidate_profile": parsed_data,
-        "generated_quiz": quiz_data,
-        "matched_scheme": scheme_data
-    }
+    print("--- Running High-Speed AI Pipeline ---")
+    output = process_full_returnee_pipeline(sample_resume, target, "M.Sc", 32, False)
 
     with open("output.json", "w", encoding="utf-8") as f:
-        json.dump(final_output, f, indent=4)
+        json.dump(output, f, indent=4)
         
     print(" Output successfully saved to output.json!")
