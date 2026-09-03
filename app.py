@@ -19,7 +19,7 @@ has_phd = st.sidebar.checkbox("Holds Ph.D.?", value=(degree == "Ph.D."))
 st.sidebar.subheader("Resume Input")
 uploaded_file = st.sidebar.file_uploader("Upload Resume (PDF or TXT)", type=["pdf", "txt"])
 
-# Resume Extraction Logic
+# Resume Text Extraction Logic
 resume_text = ""
 if uploaded_file is not None:
     if uploaded_file.name.endswith(".pdf"):
@@ -34,7 +34,7 @@ if uploaded_file is not None:
     else:
         resume_text = uploaded_file.read().decode("utf-8")
 
-# Fallback text area if no file is uploaded or extraction is empty
+# Fallback manually pasted text
 if not resume_text.strip():
     resume_text = st.text_area(
         "Or paste resume text manually:",
@@ -51,7 +51,7 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
     if not resume_text.strip():
         st.error("Please upload a valid resume PDF or enter resume text before proceeding.")
     else:
-        # Clear previous session state to force fresh data load
+        # Clear previous pipeline data state to prevent displaying stale results
         if "pipeline_data" in st.session_state:
             del st.session_state["pipeline_data"]
 
@@ -66,7 +66,6 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
             try:
                 response = requests.post(API_URL, json=payload)
                 if response.status_code == 200:
-                    # Save fresh payload to session state and rerun Streamlit UI
                     st.session_state["pipeline_data"] = response.json()
                     st.rerun()
                 else:
@@ -74,13 +73,13 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
             except Exception as e:
                 st.error(f"Could not connect to FastAPI server at {API_URL}. Ensure `main.py` is running! Details: {e}")
 
-# --- RENDER RESULTS FROM SESSION STATE ---
+# --- RENDER DASHBOARD RESULTS FROM SESSION STATE ---
 if "pipeline_data" in st.session_state:
     data = st.session_state["pipeline_data"]
     ai = data.get("ai_pipeline", {})
     profile = ai.get("candidate_profile", {})
     
-    # SECTION 1: SKILLS & GAPS
+    # SECTION 1: SKILLS & SKILL GAP DELTA
     st.subheader("📊 Skill Analysis & Market Delta")
     col1, col2 = st.columns(2)
     with col1:
@@ -98,7 +97,6 @@ if "pipeline_data" in st.session_state:
         st.subheader("🎥 Recommended YouTube Upskilling Courses")
         v_col1, v_col2 = st.columns(2)
         
-        # Query 1 Video Embed
         with v_col1:
             videos_1 = fetch_youtube_videos(queries[0], max_results=1)
             if videos_1:
@@ -107,7 +105,6 @@ if "pipeline_data" in st.session_state:
             else:
                 st.caption(f"**Topic 1:** {queries[0]}")
         
-        # Query 2 Video Embed
         if len(queries) > 1:
             with v_col2:
                 videos_2 = fetch_youtube_videos(queries[1], max_results=1)
@@ -119,7 +116,7 @@ if "pipeline_data" in st.session_state:
 
     st.divider()
 
-    # SECTION 2: GOVERNMENT SCHEMES
+    # SECTION 2: DST GOVERNMENT SCHEMES
     st.subheader("🏛️ Matched DST Government Scheme")
     scheme = ai.get("matched_scheme", {})
     st.success(f"**Scheme:** {scheme.get('matched_scheme', 'None')}")
@@ -137,18 +134,43 @@ if "pipeline_data" in st.session_state:
 
     st.divider()
 
-    # SECTION 4: MATCHED RETURNSHIPS & MENTORS
+    # SECTION 4: REAL-TIME RETURNSHIPS & GOOGLE CALENDAR MENTOR SCHEDULING
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("💼 Matched Returnships")
-        for job in data.get("matched_returnships", []):
-            st.write(f"**{job['title']}** — {job['company']}")
-            st.caption(f"Location: {job['location']} | Duration: {job['duration']}")
-            st.button(f"Apply for {job['title']}", key=f"job_{job['id']}")
+        st.subheader("💼 Real-Time Job Listings (JSearch)")
+        jobs = data.get("matched_returnships", [])
+        if jobs:
+            for job in jobs:
+                st.write(f"**{job['title']}** — {job['company']}")
+                st.caption(f"Location: {job['location']} | Type: {job['employment_type']}")
+                if job.get("apply_link"):
+                    st.link_button("Apply on Job Portal 🔗", job["apply_link"])
+        else:
+            st.info("No live job listings returned from JSearch API.")
     
     with c2:
         st.subheader("🤝 Peer Mentors")
         for mentor in data.get("matched_mentors", []):
             st.write(f"**{mentor['name']}** ({mentor['role']})")
             st.caption(f"Journey: {mentor['break_history']}")
-            st.button(f"Book Session ({mentor['availability']})", key=f"mentor_{mentor['id']}")
+            
+            if st.button(f"📅 Schedule Calendar Session", key=f"mentor_{mentor['id']}"):
+                with st.spinner("Creating event on Google Calendar..."):
+                    try:
+                        res = requests.post(
+                            "http://127.0.0.1:8000/api/schedule-meeting",
+                            json={
+                                "mentor_name": mentor["name"],
+                                "mentor_role": mentor["role"],
+                                "user_email": "candidate@example.com"
+                            }
+                        )
+                        if res.status_code == 200:
+                            booking_info = res.json()
+                            if booking_info.get("status") == "success":
+                                st.success(f"✅ Session Scheduled! {booking_info.get('start_time')}")
+                                st.markdown(f"[🔗 View in Google Calendar]({booking_info.get('event_link')})")
+                            else:
+                                st.info(f"ℹ️ Demo Mode: Meeting request sent to {mentor['name']}.")
+                    except Exception as e:
+                        st.error(f"Error booking calendar session: {e}")
