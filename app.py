@@ -1,8 +1,9 @@
 import streamlit as st
 import requests
 from pypdf import PdfReader
+from youtube_helper import fetch_youtube_videos
 
-API_URL = "[http://127.0.0.1:8000/api/analyze](http://127.0.0.1:8000/api/analyze)"
+API_URL = "http://127.0.0.1:8000/api/analyze".strip()
 
 st.set_page_config(page_title="Re-STEM Platform", layout="wide")
 st.title("🌱 Re-STEM: AI Career Re-Entry Engine")
@@ -64,19 +65,19 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
                     # Save payload to session state to make UI interactions instantaneous
                     st.session_state["pipeline_data"] = response.json()
                 else:
-                    st.error("Error communicating with backend server.")
+                    st.error(f"Backend Server Error ({response.status_code}): {response.text}")
             except Exception as e:
                 st.error(f"Could not connect to FastAPI server at {API_URL}. Ensure `main.py` is running! Details: {e}")
 
 # --- RENDER RESULTS FROM SESSION STATE ---
 if "pipeline_data" in st.session_state:
     data = st.session_state["pipeline_data"]
-    ai = data["ai_pipeline"]
+    ai = data.get("ai_pipeline", {})
+    profile = ai.get("candidate_profile", {})
     
     # SECTION 1: SKILLS & GAPS
     st.subheader("📊 Skill Analysis & Market Delta")
     col1, col2 = st.columns(2)
-    profile = ai.get("candidate_profile", {})
     with col1:
         st.markdown("**Existing Skills:**")
         st.write(", ".join(profile.get("existing_skills", [])))
@@ -85,6 +86,32 @@ if "pipeline_data" in st.session_state:
         for gap in profile.get("missing_skills_for_target", []):
             st.error(f"• {gap}")
     
+    # SECTION 1.5: YOUTUBE RECOMMENDED COURSES
+    queries = profile.get("youtube_search_queries", [])
+    if queries:
+        st.divider()
+        st.subheader("🎥 Recommended YouTube Upskilling Courses")
+        v_col1, v_col2 = st.columns(2)
+        
+        # Query 1 Video Embed
+        with v_col1:
+            videos_1 = fetch_youtube_videos(queries[0], max_results=1)
+            if videos_1:
+                st.caption(f"**Topic 1:** {videos_1[0]['title']}")
+                st.video(videos_1[0]['url'])
+            else:
+                st.caption(f"**Topic 1:** {queries[0]}")
+        
+        # Query 2 Video Embed
+        if len(queries) > 1:
+            with v_col2:
+                videos_2 = fetch_youtube_videos(queries[1], max_results=1)
+                if videos_2:
+                    st.caption(f"**Topic 2:** {videos_2[0]['title']}")
+                    st.video(videos_2[0]['url'])
+                else:
+                    st.caption(f"**Topic 2:** {queries[1]}")
+
     st.divider()
 
     # SECTION 2: GOVERNMENT SCHEMES
