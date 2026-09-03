@@ -19,7 +19,7 @@ has_phd = st.sidebar.checkbox("Holds Ph.D.?", value=(degree == "Ph.D."))
 st.sidebar.subheader("Resume Input")
 uploaded_file = st.sidebar.file_uploader("Upload Resume (PDF or TXT)", type=["pdf", "txt"])
 
-# Resume Text Extraction Logic
+# Resume Extraction Logic
 resume_text = ""
 if uploaded_file is not None:
     if uploaded_file.name.endswith(".pdf"):
@@ -34,7 +34,7 @@ if uploaded_file is not None:
     else:
         resume_text = uploaded_file.read().decode("utf-8")
 
-# Fallback manually pasted text
+# Fallback text area if no file is uploaded
 if not resume_text.strip():
     resume_text = st.text_area(
         "Or paste resume text manually:",
@@ -73,13 +73,13 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
             except Exception as e:
                 st.error(f"Could not connect to FastAPI server at {API_URL}. Ensure `main.py` is running! Details: {e}")
 
-# --- RENDER DASHBOARD RESULTS FROM SESSION STATE ---
+# --- RENDER RESULTS FROM SESSION STATE ---
 if "pipeline_data" in st.session_state:
     data = st.session_state["pipeline_data"]
     ai = data.get("ai_pipeline", {})
     profile = ai.get("candidate_profile", {})
     
-    # SECTION 1: SKILLS & SKILL GAP DELTA
+    # SECTION 1: SKILLS & GAPS
     st.subheader("📊 Skill Analysis & Market Delta")
     col1, col2 = st.columns(2)
     with col1:
@@ -116,7 +116,7 @@ if "pipeline_data" in st.session_state:
 
     st.divider()
 
-    # SECTION 2: DST GOVERNMENT SCHEMES
+    # SECTION 2: GOVERNMENT SCHEMES
     st.subheader("🏛️ Matched DST Government Scheme")
     scheme = ai.get("matched_scheme", {})
     st.success(f"**Scheme:** {scheme.get('matched_scheme', 'None')}")
@@ -134,43 +134,61 @@ if "pipeline_data" in st.session_state:
 
     st.divider()
 
-    # SECTION 4: REAL-TIME RETURNSHIPS & GOOGLE CALENDAR MENTOR SCHEDULING
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("💼 Real-Time Job Listings (JSearch)")
+    # SECTION 4: DUAL-ENGINE JOB MATCHING & GOOGLE CALENDAR MENTORS
+    st.subheader("💼 Career Matching Engine: Target vs High-Demand Modern Roles")
+
+    job_col1, job_col2 = st.columns(2)
+
+    with job_col1:
+        st.markdown(f"### 🎯 Target Role: {target_role}")
         jobs = data.get("matched_returnships", [])
         if jobs:
             for job in jobs:
                 st.write(f"**{job['title']}** — {job['company']}")
                 st.caption(f"Location: {job['location']} | Type: {job['employment_type']}")
                 if job.get("apply_link"):
-                    st.link_button("Apply on Job Portal 🔗", job["apply_link"])
+                    st.link_button("Apply Listing 🔗", job["apply_link"], key=f"t_job_{job['id']}")
         else:
-            st.info("No live job listings returned from JSearch API.")
-    
-    with c2:
-        st.subheader("🤝 Peer Mentors")
-        for mentor in data.get("matched_mentors", []):
-            st.write(f"**{mentor['name']}** ({mentor['role']})")
-            st.caption(f"Journey: {mentor['break_history']}")
-            
-            if st.button(f"📅 Schedule Calendar Session", key=f"mentor_{mentor['id']}"):
-                with st.spinner("Creating event on Google Calendar..."):
-                    try:
-                        res = requests.post(
-                            "http://127.0.0.1:8000/api/schedule-meeting",
-                            json={
-                                "mentor_name": mentor["name"],
-                                "mentor_role": mentor["role"],
-                                "user_email": "candidate@example.com"
-                            }
-                        )
-                        if res.status_code == 200:
-                            booking_info = res.json()
-                            if booking_info.get("status") == "success":
-                                st.success(f"✅ Session Scheduled! {booking_info.get('start_time')}")
-                                st.markdown(f"[🔗 View in Google Calendar]({booking_info.get('event_link')})")
-                            else:
-                                st.info(f"ℹ️ Demo Mode: Meeting request sent to {mentor['name']}.")
-                    except Exception as e:
-                        st.error(f"Error booking calendar session: {e}")
+            st.info("No direct target role listings returned.")
+
+    with job_col2:
+        emerging_title = data.get("emerging_market_title", "Modern Tech Role")
+        st.markdown(f"### 🔥 High-Demand Career Match: {emerging_title}")
+        e_jobs = data.get("emerging_jobs", [])
+        if e_jobs:
+            for job in e_jobs:
+                st.write(f"**{job['title']}** — {job['company']}")
+                st.caption(f"Location: {job['location']} | Type: {job['employment_type']}")
+                if job.get("apply_link"):
+                    st.link_button("Apply Modern Role 🔗", job["apply_link"], key=f"e_job_{job['id']}")
+        else:
+            st.info("No high-demand listings returned.")
+
+    st.divider()
+
+    # SECTION 5: PEER MENTORS & GOOGLE CALENDAR SCHEDULING
+    st.subheader("🤝 Peer Mentors & Calendar Scheduling")
+    for mentor in data.get("matched_mentors", []):
+        st.write(f"**{mentor['name']}** ({mentor['role']})")
+        st.caption(f"Journey: {mentor['break_history']}")
+        
+        if st.button(f"📅 Schedule Calendar Session", key=f"mentor_{mentor['id']}"):
+            with st.spinner("Creating event on Google Calendar..."):
+                try:
+                    res = requests.post(
+                        "http://127.0.0.1:8000/api/schedule-meeting",
+                        json={
+                            "mentor_name": mentor["name"],
+                            "mentor_role": mentor["role"],
+                            "user_email": "candidate@example.com"
+                        }
+                    )
+                    if res.status_code == 200:
+                        booking_info = res.json()
+                        if booking_info.get("status") == "success":
+                            st.success(f"✅ Session Scheduled! {booking_info.get('start_time')}")
+                            st.markdown(f"[🔗 View in Google Calendar]({booking_info.get('event_link')})")
+                        else:
+                            st.info(f"ℹ️ Demo Mode: Session requested for {mentor['name']}.")
+                except Exception as e:
+                    st.error(f"Error booking calendar session: {e}")
