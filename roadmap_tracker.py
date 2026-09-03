@@ -3,19 +3,20 @@ import sys
 import json
 from datetime import date, datetime, timedelta
 import requests
+from dotenv import load_dotenv
 from groq import Groq
 
-# API Keys
-GROQ_API_KEY = os.environ.get(
-    "GROQ_API_KEY", 
-    "type groq api key here"
-)
-YOUTUBE_API_KEY = os.environ.get(
-    "YOUTUBE_API_KEY", 
-    "yt api key here"
-)
+# Load environment variables from .env file
+load_dotenv()
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+# Retrieve API Keys securely from environment
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
+
+if not GROQ_API_KEY:
+    print("[!] Warning: GROQ_API_KEY is missing from environment or .env file.")
+
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 
 def sanitize_filename(name: str) -> str:
@@ -28,6 +29,14 @@ def get_progress_filepath(skill: str) -> str:
 
 def fetch_youtube_video(query: str) -> dict:
     """Uses the YouTube Data API v3 to fetch the top real tutorial video."""
+    if not YOUTUBE_API_KEY:
+        fallback_query = query.replace(" ", "+")
+        return {
+            "title": f"Tutorial: {query}",
+            "channel": "YouTube Search",
+            "url": f"https://www.youtube.com/results?search_query={fallback_query}"
+        }
+
     url = "https://www.googleapis.com/youtube/v3/search"
     params = {
         "part": "snippet",
@@ -63,7 +72,7 @@ def fetch_youtube_video(query: str) -> dict:
 
 
 def generate_roadmap_data(skill: str) -> dict:
-    print(f"\n[+] Requesting 5-day project sprint for '{skill}' from Groq (qwen/qwen3.8-27b)...")
+    print(f"\n[+] Requesting 5-day project sprint for '{skill}' from Groq (llama-3.3-70b-versatile)...")
 
     prompt = f"""You are a principal engineer. Design an intensive 5-day build roadmap to master: "{skill}".
 The user must produce ONE concrete portfolio-ready capstone project built sequentially across these 5 days.
@@ -115,9 +124,13 @@ Respond ONLY with valid JSON conforming strictly to this schema:
 Ensure there are exactly 5 entries in "days" numbered 1 to 5. Return pure JSON only.
 """
 
+    if not groq_client:
+        print("[!] Error: Cannot invoke Groq API without GROQ_API_KEY in environment.")
+        sys.exit(1)
+
     try:
         completion = groq_client.chat.completions.create(
-            model="qwen/qwen3.8-27b",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are a tech mentor that outputs strict raw JSON only."},
                 {"role": "user", "content": prompt}
@@ -126,8 +139,20 @@ Ensure there are exactly 5 entries in "days" numbered 1 to 5. Return pure JSON o
         )
         data = json.loads(completion.choices[0].message.content)
     except Exception as e:
-        print(f"\n[!] Groq generation error: {e}")
-        sys.exit(1)
+        print(f"\n[!] Primary model error ({e}). Attempting fallback to 'llama-3.1-8b-instant'...")
+        try:
+            completion = groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "You are a tech mentor that outputs strict raw JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            data = json.loads(completion.choices[0].message.content)
+        except Exception as fallback_err:
+            print(f"\n[!] Groq generation failed: {fallback_err}")
+            sys.exit(1)
 
     print("[+] Querying YouTube API for top matching tutorial videos...")
     for day_item in data.get("days", []):
