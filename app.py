@@ -51,6 +51,10 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
     if not resume_text.strip():
         st.error("Please upload a valid resume PDF or enter resume text before proceeding.")
     else:
+        # Clear previous session state to force fresh data load
+        if "pipeline_data" in st.session_state:
+            del st.session_state["pipeline_data"]
+
         with st.spinner("Processing through GenAI engine in a single pass..."):
             payload = {
                 "resume_text": resume_text,
@@ -62,8 +66,9 @@ if st.button("🚀 Analyze Profile & Generate Roadmap"):
             try:
                 response = requests.post(API_URL, json=payload)
                 if response.status_code == 200:
-                    # Save payload to session state to make UI interactions instantaneous
+                    # Save fresh payload to session state and rerun Streamlit UI
                     st.session_state["pipeline_data"] = response.json()
+                    st.rerun()
                 else:
                     st.error(f"Backend Server Error ({response.status_code}): {response.text}")
             except Exception as e:

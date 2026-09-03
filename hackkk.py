@@ -1,10 +1,12 @@
 import os
 import json
+import time
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 
-# 1. Load API key securely
+# Load environment variables
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 
@@ -37,14 +39,14 @@ def safe_json_parse(raw_text: str, default_fallback: dict) -> dict:
             clean_text = clean_text[:-3]
         return json.loads(clean_text.strip())
     except Exception as e:
-        print(f"⚠️ JSON Parse Warning: {e}. Utilizing fallback data.")
+        print(f"⚠️ JSON Parse Warning: {e}. Utilizing dynamic fallback data.")
         return default_fallback
 
 
 def process_full_returnee_pipeline(resume_text: str, target_role: str, user_degree: str, age: int, has_phd: bool) -> dict:
     """
     Executes resume parsing, DST scheme matching, quiz generation, and 5-day project creation
-    in a SINGLE Gemini API pass to minimize latency.
+    in a SINGLE Gemini API pass with fallback mechanisms for API rate limits.
     """
     benchmark_skills = MARKET_BENCHMARKS.get(target_role, ["Python", "SQL", "Git", "Cloud Infrastructure"])
     
@@ -103,48 +105,89 @@ def process_full_returnee_pipeline(resume_text: str, target_role: str, user_degr
     }}
     """
     
+    # Dynamic fallback reacting directly to user inputs if Gemini endpoint fails
     fallback = {
         "candidate_profile": {
-            "existing_skills": ["SQL", "Data Analysis"],
-            "missing_skills_for_target": ["Python", "Apache Spark", "Git"],
-            "youtube_search_queries": ["Python Data Engineering tutorial", "Apache Spark crash course"]
+            "existing_skills": ["Python", "SQL", "Problem Solving"],
+            "missing_skills_for_target": benchmark_skills[:3],
+            "youtube_search_queries": [f"{benchmark_skills[0]} crash course", f"{target_role} roadmap tutorial"]
         },
         "matched_scheme": {
-            "matched_scheme": "WISE-PhD",
-            "reason": "Eligible based on age range and holding a Post-Graduate degree in STEM."
+            "matched_scheme": "WISE-PhD" if (has_phd or user_degree in ["M.Sc", "Ph.D."]) else "WISE-SCOPE",
+            "reason": f"Matched based on age {age} and degree {user_degree} for STEM re-entry."
         },
         "generated_quiz": [
             {
-                "question": "What is Apache Spark primary use case?",
-                "options": ["Distributed Data Processing", "CSS Styling", "DNS Lookup", "Video Editing"],
+                "question": f"What is a primary requirement for a {target_role}?",
+                "options": [benchmark_skills[0], "HTML Formatting", "Video Editing", "Graphic Design"],
                 "correct_answer": "A"
             }
         ],
         "micro_returnship_sandbox": [
             {
                 "day": 1,
-                "title": "Day 1: Setup & Python Basics",
-                "objective": "Configure environment and verify pipeline data.",
-                "task_description": "Set up VS Code, install dependencies, and write basic data processing scripts.",
+                "title": f"Day 1: Setup & {benchmark_skills[0]} Foundations",
+                "objective": f"Set up environment for {target_role} project.",
+                "task_description": f"Configure VS Code and write initial test scripts for {benchmark_skills[0]}.",
                 "github_deliverable": "day_1_setup.py"
+            },
+            {
+                "day": 2,
+                "title": f"Day 2: Core Implementation with {benchmark_skills[1] if len(benchmark_skills) > 1 else 'SQL'}",
+                "objective": "Build operational backend logic.",
+                "task_description": "Connect database/data pipeline and process core datasets.",
+                "github_deliverable": "day_2_pipeline.py"
+            },
+            {
+                "day": 3,
+                "title": "Day 3: Model/API Integration",
+                "objective": "Integrate key libraries and expose endpoints.",
+                "task_description": "Create REST endpoint or pipeline script to process user inputs.",
+                "github_deliverable": "day_3_api.py"
+            },
+            {
+                "day": 4,
+                "title": "Day 4: Unit Testing & Validation",
+                "objective": "Validate project outputs and ensure code stability.",
+                "task_description": "Write automated test cases using PyTest.",
+                "github_deliverable": "test_pipeline.py"
+            },
+            {
+                "day": 5,
+                "title": "Day 5: Portfolio Deployment & GitHub Setup",
+                "objective": "Prepare repository for returnship application submission.",
+                "task_description": "Create comprehensive README.md and push final code to GitHub.",
+                "github_deliverable": "README.md"
             }
         ]
     }
 
-    response = client.models.generate_content(
-        model=MODEL_ID,
-        contents=prompt,
-        config=types.GenerateContentConfig(response_mime_type="application/json")
-    )
-    return safe_json_parse(response.text, fallback)
+    # Execute single-pass inference with retry logic
+    for attempt in range(2):
+        try:
+            response = client.models.generate_content(
+                model=MODEL_ID,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+            return safe_json_parse(response.text, fallback)
+        except APIError as e:
+            print(f"⚠️ Gemini API Warning (Attempt {attempt+1}): {e}. Retrying in 1s...")
+            time.sleep(1)
+        except Exception as e:
+            print(f"⚠️ General Error: {e}. Utilizing fallback data.")
+            break
+
+    print("⚠️ Servicing dynamic fallback data to dashboard.")
+    return fallback
 
 
 if __name__ == "__main__":
-    sample_resume = "4 years experience as SQL Analyst. Master of Science degree."
-    target = "Data Engineer"
+    sample_resume = "4 years experience in Python and Scikit-Learn."
+    target = "AI/ML Engineer"
     
-    print("--- Running High-Speed AI Pipeline ---")
-    output = process_full_returnee_pipeline(sample_resume, target, "M.Sc", 32, False)
+    print("--- Running High-Speed Single Pass Engine ---")
+    output = process_full_returnee_pipeline(sample_resume, target, "M.Tech", 31, False)
 
     with open("output.json", "w", encoding="utf-8") as f:
         json.dump(output, f, indent=4)
